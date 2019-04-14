@@ -21,6 +21,7 @@ import struct
 
 import six
 
+from . import ipv6
 from . import util
 
 # Matcher for NBD Unix URL path.
@@ -306,6 +307,7 @@ class TCPAddress(tuple):
         if not isinstance(port, six.integer_types):
             raise ValueError("Invalid port {!r}, expecting integer value"
                              .format(port))
+        host = ipv6.unquote_address(host)
         return tuple.__new__(cls, (host, port))
 
     @property
@@ -321,7 +323,8 @@ class TCPAddress(tuple):
         return self[1]
 
     def url(self, export=None):
-        s = "nbd:{}:{}".format(self.host, self.port)
+        host = ipv6.quote_address(self.host)
+        s = "nbd:{}:{}".format(host, self.port)
         if export:
             s += ":exportname=" + export
         return s

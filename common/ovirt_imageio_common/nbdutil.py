@@ -303,32 +303,35 @@ def wait_for_socket(addr, timeout, step=0.02):
 
     log.debug("Waiting for socket %s up to %.6f seconds", addr, timeout)
 
+    while True:
+        try:
+            check_connection(addr)
+        except socket.error as e:
+            if e.args[0] not in (errno.ECONNREFUSED, errno.ENOENT):
+                raise
+
+            # Timed out?
+            now = time.time()
+            if now >= deadline:
+                return False
+
+            # Wait until the next iteration, but not more than the
+            # requested deadline.
+            wait = min(step, deadline - now)
+            time.sleep(wait)
+        else:
+            log.debug("Waited for %s %.6f seconds",
+                      addr, time.time() - start)
+            return True
+
+
+def check_connection(addr):
     if addr.transport == "unix":
         sock = socket.socket(socket.AF_UNIX)
+        with closing(sock):
+            sock.connect(addr)
     elif addr.transport == "tcp":
-        # TODO: IPV6 support.
-        sock = socket.socket(socket.AF_INET)
+        sock = socket.create_connection(addr)
+        sock.close()
     else:
         raise RuntimeError("Cannot wait for {}".format(addr))
-
-    with closing(sock):
-        while True:
-            try:
-                sock.connect(addr)
-            except socket.error as e:
-                if e.args[0] not in (errno.ECONNREFUSED, errno.ENOENT):
-                    raise
-
-                # Timed out?
-                now = time.time()
-                if now >= deadline:
-                    return False
-
-                # Wait until the next iteration, but not more than the
-                # requested deadline.
-                wait = min(step, deadline - now)
-                time.sleep(wait)
-            else:
-                log.debug("Waited for %s %.6f seconds",
-                          addr, time.time() - start)
-                return True
