@@ -20,6 +20,11 @@ class daemon:
     # slightly, but may also decrease it significantly.
     buffer_size = 8388608
 
+    # Maximum number of connections for same /image/ticket-id URL. Using more
+    # connections may improve single image upload or donwload, but may decrease
+    # throughput when transferring multiple images concurrently.
+    max_connections = 8
+
     # Daemon run directory. Runtime stuff like socket or profile information
     # will be stored in this directory.
     # This is configurable only for development purposes and is not expected to
