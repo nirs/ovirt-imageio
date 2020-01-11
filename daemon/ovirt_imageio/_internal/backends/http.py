@@ -18,6 +18,8 @@ import os
 import socket
 import ssl
 
+from functools import partial
+
 from .. import errors
 from .. import http
 from . import image
@@ -48,6 +50,13 @@ def open(url, mode="r+", sparse=True, dirty=False, max_connections=8,
     """
     assert url.scheme == "https"
     return Backend(url, **options)
+
+
+def factory(url, cafile=None, secure=True):
+    """
+    Return factory function for creating multiple backends.
+    """
+    return partial(open, url, cafile=cafile, secure=secure)
 
 
 class Backend(object):

@@ -21,8 +21,8 @@ from ovirt_imageio._internal import uhttp
 from ovirt_imageio._internal import util
 from ovirt_imageio._internal import errors
 
+from ovirt_imageio._internal.backends import http as http_backend
 from ovirt_imageio._internal.backends import image
-from ovirt_imageio._internal.backends.http import Backend
 
 from . marks import requires_python3
 
@@ -45,6 +45,8 @@ def http_server(tmp_pki):
     server.url = urlparse(
         "https://localhost:{}/".format(server.server_port))
     server.cafile = tmp_pki.cafile
+    server.open = http_backend.factory(server.url, cafile=server.cafile)
+
     server.app = http.Router([])
 
     t = util.start_thread(
@@ -254,7 +256,7 @@ class Daemon(Handler):
 
 def test_old_daemon_open(http_server):
     handler = OldDaemon(http_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         assert b.server_address == http_server.server_address
         assert b.tell() == 0
         assert b.size() == len(handler.image)
@@ -265,20 +267,20 @@ def test_old_daemon_open(http_server):
 
 def test_old_daemon_readinto(http_server):
     handler = OldDaemon(http_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_readinto(handler, b)
 
 
 def test_old_daemon_write(http_server):
     handler = OldDaemon(http_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_write(handler, b)
         assert not handler.dirty
 
 
 def test_old_daemon_zero(http_server):
     handler = OldDaemon(http_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_zero(handler, b)
         assert not handler.dirty
 
@@ -294,7 +296,7 @@ def test_old_daemon_zero_error(http_server):
     handler.put = fail
 
     with pytest.raises(http.Error) as e:
-        with Backend(http_server.url, http_server.cafile) as b:
+        with http_server.open() as b:
             b.zero(4096)
 
     assert e.value.code == http.FORBIDDEN
@@ -302,14 +304,14 @@ def test_old_daemon_zero_error(http_server):
 
 def test_old_daemon_read_from(http_server):
     handler = OldDaemon(http_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_read_from(handler, b)
         assert not handler.dirty
 
 
 def test_old_daemon_write_to(http_server):
     handler = OldDaemon(http_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_write_to(handler, b)
 
 
@@ -325,7 +327,7 @@ def test_old_daemon_size_error(http_server):
     handler.get = fail
 
     with pytest.raises(http.Error) as e:
-        with Backend(http_server.url, None, secure=False) as b:
+        with http_server.open() as b:
             b.size()
 
     assert e.value.code == http.FORBIDDEN
@@ -335,7 +337,7 @@ def test_old_daemon_size_error(http_server):
 
 def test_old_proxy_open(http_server):
     handler = OldProxy(http_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         assert b.server_address == http_server.server_address
         assert b.tell() == 0
         assert b.size() == len(handler.image)
@@ -346,34 +348,34 @@ def test_old_proxy_open(http_server):
 
 def test_old_proxy_readinto(http_server):
     handler = OldProxy(http_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_readinto(handler, b)
 
 
 def test_old_proxy_write(http_server):
     handler = OldProxy(http_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_write(handler, b)
         assert not handler.dirty
 
 
 def test_old_proxy_zero(http_server):
     handler = OldProxy(http_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_zero(handler, b)
         assert not handler.dirty
 
 
 def test_old_proxy_read_from(http_server):
     handler = OldProxy(http_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_read_from(handler, b)
         assert not handler.dirty
 
 
 def test_old_proxy_write_to(http_server):
     handler = OldProxy(http_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_write_to(handler, b)
 
 
@@ -381,7 +383,7 @@ def test_old_proxy_write_to(http_server):
 
 def test_daemon_no_unix_socket_open(http_server):
     handler = Daemon(http_server, extents=False)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         assert b.server_address == http_server.server_address
         assert b.tell() == 0
         assert b.size() == len(handler.image)
@@ -392,13 +394,13 @@ def test_daemon_no_unix_socket_open(http_server):
 
 def test_daemon_no_unix_socket_readinto(http_server):
     handler = Daemon(http_server, extents=False)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_readinto(handler, b)
 
 
 def test_daemon_no_unix_socket_write(http_server):
     handler = Daemon(http_server, extents=False)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_write(handler, b)
         assert handler.dirty
         b.flush()
@@ -407,7 +409,7 @@ def test_daemon_no_unix_socket_write(http_server):
 
 def test_daemon_no_unix_socket_zero(http_server):
     handler = Daemon(http_server, extents=False)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_zero(handler, b)
         assert handler.dirty
         b.flush()
@@ -416,7 +418,7 @@ def test_daemon_no_unix_socket_zero(http_server):
 
 def test_daemon_no_unix_socket_read_from(http_server):
     handler = Daemon(http_server, extents=False)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_read_from(handler, b)
         assert handler.dirty
         b.flush()
@@ -425,7 +427,7 @@ def test_daemon_no_unix_socket_read_from(http_server):
 
 def test_daemon_no_unix_socket_write_to(http_server):
     handler = Daemon(http_server, extents=False)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_write_to(handler, b)
 
 
@@ -434,7 +436,7 @@ def test_daemon_no_unix_socket_write_to(http_server):
 def test_daemon_bad_unix_socket_open(http_server):
     handler = Daemon(http_server, extents=False)
     handler.unix_socket = "\0bad/socket"
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         assert b.server_address == http_server.server_address
         assert b.tell() == 0
         assert b.size() == len(handler.image)
@@ -447,7 +449,7 @@ def test_daemon_bad_unix_socket_open(http_server):
 
 def test_daemon_no_extents_open(http_server, uhttp_server):
     handler = Daemon(http_server, uhttp_server, extents=False)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         assert b.server_address == uhttp_server.server_address
         assert b.tell() == 0
         assert b.size() == len(handler.image)
@@ -460,7 +462,7 @@ def test_daemon_no_extents_open(http_server, uhttp_server):
 
 def test_daemon_open(http_server, uhttp_server):
     handler = Daemon(http_server, uhttp_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         assert b.server_address == uhttp_server.server_address
         assert b.tell() == 0
         assert b.size() == len(handler.image)
@@ -471,7 +473,7 @@ def test_daemon_open(http_server, uhttp_server):
 
 def test_daemon_open_insecure(http_server, uhttp_server):
     Daemon(http_server, uhttp_server)
-    with Backend(http_server.url, None, secure=False) as b:
+    with http_backend.Backend(http_server.url, cafile=None, secure=False) as b:
         assert b.server_address == uhttp_server.server_address
 
 
@@ -486,7 +488,7 @@ def test_daemon_open_error(http_server, uhttp_server):
     handler.options = fail
 
     with pytest.raises(http.Error) as e:
-        with Backend(http_server.url, None, secure=False):
+        with http_server.open():
             pass
 
     assert e.value.code == http.FORBIDDEN
@@ -501,7 +503,7 @@ def test_daemon_extents_zero(http_server, uhttp_server):
         {"start": chunk_size, "length": chunk_size, "zero": True},
     ]
 
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         # Zero extents are available.
         assert list(b.extents()) == [
             image.ZeroExtent(0, chunk_size, False),
@@ -522,7 +524,7 @@ def test_daemon_extents_dirty(http_server, uhttp_server):
         {"start": chunk_size, "length": chunk_size, "dirty": False},
     ]
 
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         # Both "zero" and "dirty" extents are available.
         assert list(b.extents("zero")) == [
             image.ZeroExtent(0, b.size(), True),
@@ -542,7 +544,7 @@ def test_daemon_extents_error(http_server, uhttp_server):
     handler.get = fail
 
     with pytest.raises(http.Error) as e:
-        with Backend(http_server.url, None, secure=False) as b:
+        with http_server.open() as b:
             list(b.extents())
 
     assert e.value.code == http.FORBIDDEN
@@ -550,20 +552,20 @@ def test_daemon_extents_error(http_server, uhttp_server):
 
 def test_daemon_readinto(http_server, uhttp_server):
     handler = Daemon(http_server, uhttp_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_readinto(handler, b)
 
 
 def test_daemon_readinto_error(http_server, uhttp_server):
     handler = Daemon(http_server, uhttp_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_readinto_error(handler, b)
 
 
 @pytest.mark.parametrize("size", [4096, 42])
 def test_daemon_readinto_short(http_server, uhttp_server, size):
     handler = Daemon(http_server, uhttp_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         offset = b.size() - size
         buf = bytearray(8192)
 
@@ -579,7 +581,7 @@ def test_daemon_readinto_short(http_server, uhttp_server, size):
 @pytest.mark.parametrize("end_offset", [0, 1])
 def test_daemon_readinto_end(http_server, uhttp_server, end_offset):
     _ = Daemon(http_server, uhttp_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         offset = b.size() + end_offset
         b.seek(offset)
         buf = bytearray(4096)
@@ -591,7 +593,7 @@ def test_daemon_readinto_end(http_server, uhttp_server, end_offset):
 
 def test_daemon_write(http_server, uhttp_server):
     handler = Daemon(http_server, uhttp_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_write(handler, b)
         assert handler.dirty
         b.flush()
@@ -600,13 +602,13 @@ def test_daemon_write(http_server, uhttp_server):
 
 def test_daemon_write_error(http_server, uhttp_server):
     handler = Daemon(http_server, uhttp_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_write_error(handler, b)
 
 
 def test_daemon_zero(http_server, uhttp_server):
     handler = Daemon(http_server, uhttp_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_zero(handler, b)
         assert handler.dirty
         b.flush()
@@ -615,19 +617,19 @@ def test_daemon_zero(http_server, uhttp_server):
 
 def test_daemon_zero_error(http_server, uhttp_server):
     handler = Daemon(http_server, uhttp_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_zero_error(handler, b)
 
 
 def test_daemon_flush_error(http_server, uhttp_server):
     handler = Daemon(http_server, uhttp_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_flush_error(handler, b)
 
 
 def test_daemon_read_from(http_server, uhttp_server):
     handler = Daemon(http_server, uhttp_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_read_from(handler, b)
         assert handler.dirty
         b.flush()
@@ -636,20 +638,28 @@ def test_daemon_read_from(http_server, uhttp_server):
 
 def test_daemon_read_from_error(http_server, uhttp_server):
     handler = Daemon(http_server, uhttp_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_read_from_error(handler, b)
 
 
 def test_daemon_write_to(http_server, uhttp_server):
     handler = Daemon(http_server, uhttp_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_write_to(handler, b)
 
 
 def test_daemon_write_to_error(http_server, uhttp_server):
     handler = Daemon(http_server, uhttp_server)
-    with Backend(http_server.url, http_server.cafile) as b:
+    with http_server.open() as b:
         check_write_to_error(handler, b)
+
+
+def test_factory(http_server, uhttp_server):
+    handler = Daemon(http_server, uhttp_server)
+    factory = http_backend.factory(http_server.url, cafile=http_server.cafile)
+    with factory() as b1, factory() as b2:
+        check_read_from(handler, b1)
+        check_write_to(handler, b2)
 
 
 # Common flows - must works for all variants.
