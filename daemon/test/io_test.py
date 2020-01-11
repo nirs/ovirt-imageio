@@ -8,6 +8,7 @@
 
 from __future__ import absolute_import
 
+from io import BytesIO
 import pytest
 
 from six.moves.urllib_parse import urlparse
@@ -97,10 +98,12 @@ def test_copy_generic(zero):
             image.ZeroExtent(1 * chunk_size, chunk_size, True),
         ]
 
-    src = memory.Backend("r", b"x" * chunk_size + b"\0" * chunk_size)
+    src = memory.Backend(
+        data=BytesIO(b"x" * chunk_size + b"\0" * chunk_size))
     src.extents = fake_extents
 
-    dst = memory.Backend("r+", (b"y" if zero else b"\0") * size)
+    dst = memory.Backend(
+        "r+", data=BytesIO((b"y" if zero else b"\0") * size))
 
     io.copy(src, dst, buffer_size=128, zero=zero)
 
@@ -119,10 +122,12 @@ def test_copy_read_from(zero):
             image.ZeroExtent(1 * chunk_size, chunk_size, True),
         ]
 
-    src = memory.Backend("r", b"x" * chunk_size + b"\0" * chunk_size)
+    src = memory.Backend(
+        data=BytesIO(b"x" * chunk_size + b"\0" * chunk_size))
     src.extents = fake_extents
 
-    dst = memory.ReaderFrom("r+", (b"y" if zero else b"\0") * size)
+    dst = memory.ReaderFrom(
+        "r+", data=BytesIO((b"y" if zero else b"\0") * size))
 
     io.copy(src, dst, buffer_size=128)
 
@@ -141,10 +146,12 @@ def test_copy_write_to(zero):
             image.ZeroExtent(1 * chunk_size, chunk_size, True),
         ]
 
-    src = memory.WriterTo("r", b"x" * chunk_size + b"\0" * chunk_size)
+    src = memory.WriterTo(
+        data=BytesIO(b"x" * chunk_size + b"\0" * chunk_size))
     src.extents = fake_extents
 
-    dst = memory.Backend("r+", (b"y" if zero else b"\0") * size)
+    dst = memory.Backend(
+        "r+", data=BytesIO((b"y" if zero else b"\0") * size))
 
     io.copy(src, dst, buffer_size=128, zero=zero)
 
@@ -164,7 +171,7 @@ def test_copy_dirty():
             image.DirtyExtent(3 * chunk_size, chunk_size, False),
         ]
 
-    src = memory.Backend("r", (
+    src = memory.Backend(data=BytesIO(
         b"a" * chunk_size +
         b"b" * chunk_size +
         b"c" * chunk_size +
@@ -172,7 +179,7 @@ def test_copy_dirty():
     ))
     src.extents = fake_extents
 
-    dst = memory.Backend("r+", b"\0" * size)
+    dst = memory.Backend("r+", data=BytesIO(b"\0" * size))
 
     io.copy(src, dst, dirty=True)
 
@@ -206,7 +213,7 @@ def test_copy_data_progress(zero):
             image.ZeroExtent(3 * chunk_size, chunk_size, True),
         ]
 
-    src = memory.Backend("r", (
+    src = memory.Backend(data=BytesIO(
         b"x" * chunk_size +
         b"\0" * chunk_size +
         b"x" * chunk_size +
@@ -214,7 +221,7 @@ def test_copy_data_progress(zero):
     ))
     src.extents = fake_extents
 
-    dst = memory.Backend("r+", b"\0" * size)
+    dst = memory.Backend("r+", data=BytesIO(b"\0" * size))
 
     p = FakeProgress()
     io.copy(src, dst, zero=zero, progress=p)
@@ -238,7 +245,7 @@ def test_copy_dirty_progress():
             image.DirtyExtent(3 * chunk_size, chunk_size, False),
         ]
 
-    src = memory.Backend("r", (
+    src = memory.Backend("r", BytesIO(
         b"x" * chunk_size +
         b"\0" * chunk_size +
         b"x" * chunk_size +
@@ -246,7 +253,7 @@ def test_copy_dirty_progress():
     ))
     src.extents = fake_extents
 
-    dst = memory.Backend("r+", b"\0" * size)
+    dst = memory.Backend("r+", BytesIO(b"\0" * size))
 
     p = FakeProgress()
     io.copy(src, dst, dirty=True, progress=p)

@@ -8,6 +8,8 @@
 
 from __future__ import absolute_import
 
+import io
+
 from six.moves.urllib_parse import urlparse
 import pytest
 
@@ -80,6 +82,43 @@ def test_invalid_mode():
         memory.Backend("invalid")
 
 
+def test_write_inside():
+    backing = io.BytesIO(b"\0" * 8)
+    m = memory.Backend("r+", data=backing)
+
+    m.write(b"x" * 4)
+    assert m.tell() == 4
+    assert m.size() == 8
+    assert backing.getvalue() == b"x" * 4 + b"\0" * 4
+
+    m.write(b"x" * 4)
+    assert m.tell() == 8
+    assert m.size() == 8
+    assert backing.getvalue() == b"x" * 8
+
+
+def test_write_at_end():
+    backing = io.BytesIO(b"\0" * 4)
+    m = memory.Backend("r+", data=backing)
+    m.seek(4)
+    m.write(b"x" * 4)
+
+    assert m.tell() == 8
+    assert m.size() == 8
+    assert backing.getvalue() == b"\0" * 4 + b"x" * 4
+
+
+def test_write_after_end():
+    backing = io.BytesIO(b"\0" * 4)
+    m = memory.Backend("r+", data=backing)
+    m.seek(8)
+    m.write(b"x" * 4)
+
+    assert m.tell() == 12
+    assert m.size() == 12
+    assert backing.getvalue() == b"\0" * 8 + b"x" * 4
+
+
 @pytest.mark.parametrize("sparse", [True, False])
 def test_zero_middle(sparse):
     m = memory.open(urlparse("memory:"), "r+", sparse=sparse)
@@ -92,6 +131,28 @@ def test_zero_middle(sparse):
     m.seek(0)
     assert m.readinto(b) == 12
     assert b[:12] == b"xxxx\x00\x00\x00\x00xxxx"
+
+
+def test_zero_at_end():
+    backing = io.BytesIO(b"x" * 4)
+    m = memory.Backend("r+", data=backing)
+    m.seek(4)
+    m.zero(4)
+
+    assert m.tell() == 8
+    assert m.size() == 8
+    assert backing.getvalue() == b"x" * 4 + b"\0" * 4
+
+
+def test_zero_after_end():
+    backing = io.BytesIO(b"x" * 4)
+    m = memory.Backend("r+", data=backing)
+    m.seek(8)
+    m.zero(4)
+
+    assert m.tell() == 12
+    assert m.size() == 12
+    assert backing.getvalue() == b"x" * 4 + b"\0" * 8
 
 
 def test_close():
@@ -136,8 +197,8 @@ def test_propagate_user_error():
             raise UserError("user error")
 
 
-def test_create_with_bytes():
-    m = memory.Backend(data=b"data")
+def test_create_with_backing():
+    m = memory.Backend(data=io.BytesIO(b"data"))
     assert m.readable()
     assert not m.writable()
 
@@ -148,7 +209,7 @@ def test_create_with_bytes():
 
 def test_dirty():
     # backend created clean
-    m = memory.Backend("r+", data=b"data")
+    m = memory.Backend("r+", data=io.BytesIO(b"data"))
     assert not m.dirty
 
     # write ans zero dirty the backend
@@ -170,7 +231,7 @@ def test_dirty():
 
 
 def test_size():
-    m = memory.Backend("r+", data=b"data")
+    m = memory.Backend("r+", data=io.BytesIO(b"data"))
     assert m.size() == 4
     assert m.tell() == 0
     m.zero(5)
@@ -180,12 +241,12 @@ def test_size():
 
 
 def test_extents():
-    m = memory.Backend("r+", data=b"data")
+    m = memory.Backend(data=io.BytesIO(b"data"))
     assert list(m.extents()) == [image.ZeroExtent(0, 4, False)]
 
 
 def test_extents_dirty():
-    m = memory.Backend("r+", data=b"data")
+    m = memory.Backend(data=io.BytesIO(b"data"))
     with pytest.raises(errors.UnsupportedOperation):
         list(m.extents(context="dirty"))
 
@@ -213,8 +274,8 @@ def test_user_extents():
 @requires_python3
 def test_read_from():
     size = 128
-    src = memory.Backend(data=b"x" * size)
-    dst = memory.ReaderFrom("r+", b"y" * size)
+    src = memory.Backend(data=io.BytesIO(b"x" * size))
+    dst = memory.ReaderFrom("r+", io.BytesIO(b"y" * size))
     buf = bytearray(32)
     dst.read_from(src, size, buf)
 
@@ -225,8 +286,8 @@ def test_read_from():
 
 @requires_python3
 def test_read_from_some():
-    src = memory.Backend(data=b"x" * 128)
-    dst = memory.ReaderFrom("r+", b"y" * 128)
+    src = memory.Backend(data=io.BytesIO(b"x" * 128))
+    dst = memory.ReaderFrom("r+", data=io.BytesIO(b"y" * 128))
     buf = bytearray(32)
 
     src.seek(32)
@@ -241,8 +302,8 @@ def test_read_from_some():
 @requires_python3
 def test_write_to():
     size = 128
-    src = memory.WriterTo(data=b"x" * size)
-    dst = memory.Backend("r+", data=b"y" * size)
+    src = memory.WriterTo(data=io.BytesIO(b"x" * size))
+    dst = memory.Backend("r+", data=io.BytesIO(b"y" * size))
     buf = bytearray(32)
     src.write_to(dst, size, buf)
 
@@ -254,8 +315,8 @@ def test_write_to():
 @requires_python3
 def test_write_to_some():
     size = 128
-    src = memory.WriterTo(data=b"x" * size)
-    dst = memory.Backend("r+", data=b"y" * size)
+    src = memory.WriterTo(data=io.BytesIO(b"x" * size))
+    dst = memory.Backend("r+", data=io.BytesIO(b"y" * size))
     buf = bytearray(32)
 
     src.seek(32)
@@ -270,7 +331,7 @@ def test_write_to_some():
 def test_factory():
     size = 64
     data = b"a" * 32 + b"b" * 32
-    factory = memory.factory(data=data)
+    factory = memory.factory(data=io.BytesIO(data))
     with factory() as b1, factory() as b2:
         buf = bytearray(size)
 

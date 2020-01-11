@@ -56,10 +56,11 @@ class Backend(object):
         log.info("Open backend mode=%r max_connections=%r",
                  mode, max_connections)
         self._mode = mode
-        self._buf = io.BytesIO(data)
+        self._buf = data or io.BytesIO()
         # TODO: Make size constant so we can build the default extents here.
         self._extents = extents or {}
         self._dirty = False
+        self._closed = False
         self._max_connections = max_connections
 
     @property
@@ -75,29 +76,34 @@ class Backend(object):
     # io.BaseIO interface
 
     def readinto(self, buf):
+        self._check_closed()
         if not self.readable():
             raise IOError("Unsupproted operation: read")
         return self._buf.readinto(buf)
 
     def write(self, buf):
+        self._check_closed()
         if not self.writable():
             raise IOError("Unsupproted operation: write")
         self._dirty = True
         return self._buf.write(buf)
 
     def tell(self):
+        self._check_closed()
         return self._buf.tell()
 
     def seek(self, pos, how=os.SEEK_SET):
+        self._check_closed()
         return self._buf.seek(pos, how)
 
     def flush(self):
+        self._check_closed()
         self._buf.flush()
         self._dirty = False
 
     def close(self):
         log.info("Close backend")
-        self._buf.close()
+        self._closed = True
 
     def __enter__(self):
         return self
@@ -114,17 +120,17 @@ class Backend(object):
     # Backend interface.
 
     def zero(self, count):
+        self._check_closed()
         if not self.writable():
-            raise IOError("Unsupproted operation: truncate")
-        self._dirty = True
-        self._buf.write(b"\0" * count)
-        return count
+            raise IOError("Unsupproted operation: zero")
+        return self.write(b"\0" * count)
 
     @property
     def block_size(self):
         return 1
 
     def extents(self, context="zero"):
+        self._check_closed()
         # If not configured, report single data extent.
         if not self._extents and context == "zero":
             yield image.ZeroExtent(0, self.size(), False)
@@ -141,9 +147,11 @@ class Backend(object):
     # Debugging interface
 
     def readable(self):
+        self._check_closed()
         return self._mode in ("r", "r+")
 
     def writable(self):
+        self._check_closed()
         return self._mode in ("w", "r+")
 
     @property
@@ -162,6 +170,7 @@ class Backend(object):
         return "memory"
 
     def size(self):
+        self._check_closed()
         old_pos = self._buf.tell()
         self._buf.seek(0, os.SEEK_END)
         result = self._buf.tell()
@@ -170,6 +179,11 @@ class Backend(object):
 
     def data(self):
         return self._buf.getvalue()
+
+    def _check_closed(self):
+        if self._closed:
+            # Keeping io.FileIO behaviour.
+            raise ValueError("Operation on closed backend")
 
 
 class ReaderFrom(Backend):
