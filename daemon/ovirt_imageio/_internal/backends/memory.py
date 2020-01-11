@@ -12,6 +12,8 @@ import io
 import logging
 import os
 
+from functools import partial
+
 from .. import errors
 from . import image
 
@@ -34,6 +36,13 @@ def open(url, mode="r", sparse=False, dirty=False, max_connections=8,
         **options: ignored, memory backend does not have any options.
     """
     return Backend(mode=mode, max_connections=max_connections)
+
+
+def factory(mode="r", data=None):
+    """
+    Return factory function creating multiple backends.
+    """
+    return partial(Backend, mode=mode, data=data)
 
 
 class Backend(object):

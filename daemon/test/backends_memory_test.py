@@ -245,3 +245,19 @@ def test_write_to_some():
     assert src.tell() == 96
     assert dst.tell() == 96
     assert dst.data() == b"y" * 32 + b"x" * 64 + b"y" * 32
+
+
+def test_factory():
+    size = 64
+    data = b"a" * 32 + b"b" * 32
+    factory = memory.factory(data=data)
+    with factory() as b1, factory() as b2:
+        buf = bytearray(size)
+
+        b1.seek(0)
+        b1.readinto(memoryview(buf)[:32])
+
+        b2.seek(32)
+        b2.readinto(memoryview(buf)[32:])
+
+        assert buf == data
