@@ -274,3 +274,34 @@ def test_extents_dirty_not_availabe(nbd_server, fmt):
     with nbd.open(nbd_server.url, "r+", dirty=True) as b:
         with pytest.raises(errors.UnsupportedOperation):
             list(b.extents(context="dirty"))
+
+
+def test_factory(nbd_server):
+    chunk_size = 512
+    size = 2 * chunk_size
+
+    qemu_img.create(nbd_server.image, nbd_server.fmt, size=size)
+    nbd_server.shared = 2
+    nbd_server.start()
+
+    factory = nbd.factory(nbd_server.url, "r+")
+    with factory() as b1, factory() as b2:
+        b1.seek(0 * chunk_size)
+        b1.write(b"a" * chunk_size)
+
+        b2.seek(1 * chunk_size)
+        b2.write(b"b" * chunk_size)
+
+        b1.flush()
+        b2.flush()
+
+        buf = bytearray(size)
+        expected = b"a" * chunk_size + b"b" * chunk_size
+
+        b1.seek(0)
+        assert b1.readinto(buf) == size
+        assert buf == expected
+
+        b2.seek(0)
+        assert b2.readinto(buf) == size
+        assert buf == expected

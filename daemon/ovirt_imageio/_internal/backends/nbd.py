@@ -11,6 +11,8 @@ from __future__ import absolute_import
 import logging
 import os
 
+from functools import partial
+
 from .. import errors
 from .. import nbd
 from .. import nbdutil
@@ -49,6 +51,13 @@ def open(url, mode="r", sparse=True, dirty=False, max_connections=8,
     except:  # noqa: E722
         client.close()
         raise
+
+
+def factory(url, mode="r"):
+    """
+    Return factory function creating multiple backends.
+    """
+    return partial(open, url, mode=mode)
 
 
 class Backend(object):
