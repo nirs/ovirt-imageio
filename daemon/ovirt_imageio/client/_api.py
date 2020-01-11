@@ -29,7 +29,7 @@ log = logging.getLogger("client")
 
 
 def upload(filename, url, cafile, buffer_size=io.BUFFER_SIZE, secure=True,
-           progress=None, proxy_url=None):
+           progress=None, proxy_url=None, max_workers=io.MAX_WORKERS):
     """
     Upload filename to url
 
@@ -51,27 +51,41 @@ def upload(filename, url, cafile, buffer_size=io.BUFFER_SIZE, secure=True,
         proxy_url (str): Proxy url on the host running imageio as proxy, used
             if url is not accessible.
             e.g. https://{proxy.server}:{port}/images/{ticket-id}.
+        max_workers (int): Maximum number of worker threads to use.
     """
     if callable(progress):
         progress = ProgressWrapper(progress)
 
     info = qemu_img.info(filename)
-    if progress:
-        progress.size = info["virtual-size"]
 
-    with _open_nbd(filename, info["format"], read_only=True) as src, \
-            _open_http(
-                url,
-                "w",
-                cafile=cafile,
-                secure=secure,
-                proxy_url=proxy_url) as dst:
-        io.copy(src, dst, buffer_size=buffer_size, progress=progress)
+    # Get server info.
+    with _open_http(
+            url,
+            "r",
+            cafile=cafile,
+            secure=secure,
+            proxy_url=proxy_url) as dst:
+        max_workers = min(dst.max_writers, max_workers)
+
+    # Upload image to server.
+    with _open_nbd(
+            filename,
+            info["format"],
+            read_only=True,
+            # Need extra connection for getting extents.
+            shared=max_workers + 1) as nbd_url:
+        io.copy(
+            nbd.factory(nbd_url, "r"),
+            http.factory(dst.url, cafile=cafile, secure=secure),
+            max_workers=max_workers,
+            buffer_size=buffer_size,
+            progress=progress,
+            name="upload")
 
 
 def download(url, filename, cafile, fmt="qcow2", incremental=False,
              buffer_size=io.BUFFER_SIZE, secure=True, progress=None,
-             proxy_url=None):
+             proxy_url=None, max_workers=io.MAX_WORKERS):
     """
     Download url to filename.
 
@@ -96,33 +110,35 @@ def download(url, filename, cafile, fmt="qcow2", incremental=False,
         proxy_url (str): Proxy url on the host running imageio as proxy, used
             as if url is not accessible.
             e.g. https://{proxy.server}:{port}/images/{ticket-id}.
+        max_workers (int): Maximum number of worker threads to use.
     """
     if incremental and fmt != "qcow2":
         raise ValueError(
             "incremental={} is incompatible with fmt={}"
             .format(incremental, fmt))
 
+    # Get server and image info and create local image.
     with _open_http(
             url,
             "r",
             cafile=cafile,
             secure=secure,
             proxy_url=proxy_url) as src:
-        size = src.size()
-        if progress:
-            progress.size = size
+        max_workers = min(src.max_readers, max_workers)
+        qemu_img.create(filename, fmt, size=src.size())
 
-        qemu_img.create(filename, fmt, size=size)
-
-        with _open_nbd(filename, fmt) as dst:
-            # We created new empty file, no need to zero.
-            io.copy(
-                src,
-                dst,
-                dirty=incremental,
-                buffer_size=buffer_size,
-                zero=False,
-                progress=progress)
+    # Download image from server to local image.
+    with _open_nbd(filename, fmt, shared=max_workers) as nbd_url:
+        io.copy(
+            http.factory(src.url, cafile=cafile, secure=secure),
+            nbd.factory(nbd_url, "r+"),
+            dirty=incremental,
+            max_workers=max_workers,
+            buffer_size=buffer_size,
+            # We copy to new image, zero not needed.
+            zero=False,
+            progress=progress,
+            name="download")
 
 
 class ProgressWrapper:
@@ -136,7 +152,7 @@ class ProgressWrapper:
 
 
 @contextmanager
-def _open_nbd(filename, fmt, read_only=False):
+def _open_nbd(filename, fmt, read_only=False, shared=1):
     with _tmp_dir("imageio-") as base:
         sock = UnixAddress(os.path.join(base, "sock"))
         with qemu_nbd.run(
@@ -146,10 +162,9 @@ def _open_nbd(filename, fmt, read_only=False):
                 read_only=read_only,
                 cache=None,
                 aio=None,
-                discard=None):
-            nbd_url = urlparse(sock.url())
-            mode = "r" if read_only else "r+"
-            yield nbd.open(nbd_url, mode)
+                discard=None,
+                shared=shared):
+            yield urlparse(sock.url())
 
 
 def _open_http(transfer_url, mode, cafile=None, secure=True, proxy_url=None):

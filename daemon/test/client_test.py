@@ -311,12 +311,16 @@ def test_download_proxy_url_unused(tmpdir, srv):
     qemu_img.compare(src, dst, format1="raw", format2="raw")
 
 
+@pytest.mark.xfail(
+    "OVIRT_CI" in os.environ, reason="Must be tested with user storage")
 def test_progress(tmpdir, srv):
     src = str(tmpdir.join("src"))
+    chunk_size = 4096
     with open(src, "wb") as f:
-        f.write(b"b" * 4096)
-        f.seek(IMAGE_SIZE // 2)
-        f.write(b"b" * 4096)
+        data = b"b" * chunk_size
+        for offset in range(0, IMAGE_SIZE, chunk_size * 2):
+            f.seek(offset)
+            f.write(data)
         f.truncate(IMAGE_SIZE)
 
     dst = str(tmpdir.join("dst"))
@@ -329,17 +333,7 @@ def test_progress(tmpdir, srv):
     client.upload(
         src, url, srv.config.tls.ca_file, progress=progress)
 
-    assert progress.size == IMAGE_SIZE
-    assert progress.updates == [
-        # First write.
-        4096,
-        # First zero.
-        IMAGE_SIZE // 2 - 4096,
-        # Second write.
-        4096,
-        # Second zero
-        IMAGE_SIZE // 2 - 4096,
-    ]
+    assert progress.updates == [chunk_size] * (IMAGE_SIZE // chunk_size)
 
 
 def test_progress_callback(tmpdir, srv):
