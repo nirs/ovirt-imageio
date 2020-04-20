@@ -75,6 +75,10 @@ class Handler(object):
         if not ticket_id:
             raise http.Error(http.BAD_REQUEST, "Ticket id is required")
 
+        # Used by engine UI to close connection after download.
+        if req.query.get("close") == "y":
+            req.close_connection()
+
         offset = 0
         size = None
         if req.range:
