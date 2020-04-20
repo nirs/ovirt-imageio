@@ -15,7 +15,7 @@
 
 - Push the tag to gerrit
 
-    $ git push --tags v2.0.2
+    $ git push --tags
 
 - Send a patch to releng-tools project, adding the new version:
   See https://gerrit.ovirt.org/108073/
