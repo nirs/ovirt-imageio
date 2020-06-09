@@ -96,8 +96,8 @@ def test_copy_generic(zero):
         data=b"x" * chunk_size + b"\0" * chunk_size,
         extents={
             "zero": [
-                image.ZeroExtent(0 * chunk_size, chunk_size, False),
-                image.ZeroExtent(1 * chunk_size, chunk_size, True),
+                image.ZeroExtent(0 * chunk_size, chunk_size, False, False),
+                image.ZeroExtent(1 * chunk_size, chunk_size, True, False),
             ]
         }
     )
@@ -120,8 +120,8 @@ def test_copy_read_from(zero):
         data=b"x" * chunk_size + b"\0" * chunk_size,
         extents={
             "zero": [
-                image.ZeroExtent(0 * chunk_size, chunk_size, False),
-                image.ZeroExtent(1 * chunk_size, chunk_size, True),
+                image.ZeroExtent(0 * chunk_size, chunk_size, False, False),
+                image.ZeroExtent(1 * chunk_size, chunk_size, True, False),
             ]
         }
     )
@@ -144,8 +144,8 @@ def test_copy_write_to(zero):
         data=b"x" * chunk_size + b"\0" * chunk_size,
         extents={
             "zero": [
-                image.ZeroExtent(0 * chunk_size, chunk_size, False),
-                image.ZeroExtent(1 * chunk_size, chunk_size, True),
+                image.ZeroExtent(0 * chunk_size, chunk_size, False, False),
+                image.ZeroExtent(1 * chunk_size, chunk_size, True, False),
             ]
         }
     )
@@ -216,10 +216,10 @@ def test_copy_data_progress(zero):
         ),
         extents={
             "zero": [
-                image.ZeroExtent(0 * chunk_size, chunk_size, False),
-                image.ZeroExtent(1 * chunk_size, chunk_size, True),
-                image.ZeroExtent(2 * chunk_size, chunk_size, False),
-                image.ZeroExtent(3 * chunk_size, chunk_size, True),
+                image.ZeroExtent(0 * chunk_size, chunk_size, False, False),
+                image.ZeroExtent(1 * chunk_size, chunk_size, True, False),
+                image.ZeroExtent(2 * chunk_size, chunk_size, False, False),
+                image.ZeroExtent(3 * chunk_size, chunk_size, True, False),
             ]
         }
     )

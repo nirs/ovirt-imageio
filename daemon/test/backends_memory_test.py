@@ -181,7 +181,7 @@ def test_size():
 
 def test_extents():
     m = memory.Backend("r+", data=b"data")
-    assert list(m.extents()) == [image.ZeroExtent(0, 4, False)]
+    assert list(m.extents()) == [image.ZeroExtent(0, 4, False, False)]
 
 
 def test_extents_dirty():
@@ -193,8 +193,8 @@ def test_extents_dirty():
 def test_user_extents():
     extents = {
         "zero": [
-            image.ZeroExtent(0, 32, False),
-            image.ZeroExtent(0, 32, True),
+            image.ZeroExtent(0, 32, False, False),
+            image.ZeroExtent(0, 32, True, False),
         ],
         "dirty": [
             image.DirtyExtent(0, 16, True),
