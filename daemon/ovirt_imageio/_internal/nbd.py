@@ -1358,6 +1358,10 @@ class Extent(object):
         return bool(self._flags & STATE_ZERO)
 
     @property
+    def hole(self):
+        return bool(self._flags & STATE_HOLE)
+
+    @property
     def dirty(self):
         """
         For qemu:dirty-bitmap extent, True if extents was modified and is
