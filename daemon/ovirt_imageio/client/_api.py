@@ -14,6 +14,7 @@ from __future__ import absolute_import
 import logging
 import os
 import shutil
+import tarfile
 import tempfile
 
 from contextlib import contextmanager
@@ -149,6 +150,30 @@ def download(url, filename, cafile, fmt="qcow2", incremental=False,
                 name="download")
 
 
+def info(filename, member=None):
+    """
+    Return image information.
+
+    If member is specified filename must be a tar file, and the call returns
+    information about file named member inside the tar file.
+    """
+    offset, size = _find_member(filename, member)
+    with _expose_nbd(filename, offset=offset, size=size) as nbd_url:
+        return qemu_img.info(nbd_url)
+
+
+def measure(filename, dst_fmt, member=None):
+    """
+    Measure required size for converting filename to dst_fmt.
+
+    If member is specified filename must be a tar file, and the call returns
+    measurement about file named member inside the tar file.
+    """
+    offset, size = _find_member(filename, member)
+    with _expose_nbd(filename, offset=offset, size=size) as nbd_url:
+        return qemu_img.measure(nbd_url, dst_fmt)
+
+
 class ProgressWrapper:
     """
     In older versions we supported passing an update() callable instead of an
@@ -157,6 +182,31 @@ class ProgressWrapper:
     """
     def __init__(self, update):
         self.update = update
+
+
+def _find_member(tarname, name):
+    # Helps callers by supporiting None member.
+    if name is None:
+        return None, None
+
+    with tarfile.open(tarname) as tar:
+        member = tar.getmember(name)
+        return member.offset_data, member.size
+
+
+@contextmanager
+def _expose_nbd(filename, offset=None, size=None):
+    with _tmp_dir("imageio-") as base:
+        sock = UnixAddress(os.path.join(base, "sock"))
+        with qemu_nbd.run(
+                filename, "raw", sock,
+                read_only=True,
+                cache=None,
+                aio=None,
+                discard=None,
+                offset=offset,
+                size=size):
+            yield sock.url()
 
 
 @contextmanager

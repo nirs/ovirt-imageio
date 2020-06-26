@@ -9,6 +9,7 @@
 from __future__ import absolute_import
 
 import os
+import tarfile
 
 import pytest
 
@@ -366,3 +367,107 @@ def test_progress_callback(tmpdir, srv):
         progress=progress.append)
 
     assert progress == [IMAGE_SIZE]
+
+
+@pytest.mark.parametrize("fmt, compressed", [
+    ("raw", False),
+    ("qcow2", False),
+    ("qcow2", True),
+])
+def test_info(tmpdir, fmt, compressed):
+    # Created temporary file with some data.
+    size = 2 * 1024**2
+    tmp = str(tmpdir.join("tmp"))
+    with open(tmp, "wb") as f:
+        f.truncate(size)
+        f.write(b"x" * CLUSTER_SIZE)
+
+    # Created test image from tmporary file.
+    img = str(tmpdir.join("img"))
+    qemu_img.convert(tmp, img, "raw", fmt, compressed=compressed)
+    img_info = client.info(img)
+
+    # Check image info.
+    assert img_info["format"] == fmt
+    assert img_info["virtual-size"] == size
+
+    # Create ova with test image.
+    member = os.path.basename(img)
+    ova = str(tmpdir.join("ova"))
+    with tarfile.open(ova, "w") as tar:
+        tar.add(img, arcname=member)
+    ova_info = client.info(ova, member=member)
+
+    # Image info from ova should be the same.
+    assert ova_info["format"] == fmt
+    assert ova_info["virtual-size"] == size
+
+
+@pytest.mark.parametrize("fmt, compressed", [
+    ("raw", False),
+    ("qcow2", False),
+    ("qcow2", True),
+])
+def test_measure_to_raw(tmpdir, fmt, compressed):
+    # Create temporary file with some data.
+    size = 2 * 1024**2
+    tmp = str(tmpdir.join("tmp"))
+    with open(tmp, "wb") as f:
+        f.truncate(size)
+        f.write(b"x" * CLUSTER_SIZE)
+
+    # Created test image from tmporary file.
+    img = str(tmpdir.join("img"))
+    qemu_img.convert(tmp, img, "raw", fmt, compressed=compressed)
+
+    measure = client.measure(img, "raw")
+    assert measure["required"] == size
+
+
+@pytest.mark.parametrize("fmt, compressed", [
+    ("raw", False),
+    ("qcow2", False),
+    ("qcow2", True),
+])
+def test_measure_to_qcow2(tmpdir, fmt, compressed):
+    # Create temporary file with some data.
+    size = 2 * 1024**2
+    tmp = str(tmpdir.join("tmp"))
+    with open(tmp, "wb") as f:
+        f.truncate(size)
+        f.write(b"x" * CLUSTER_SIZE)
+
+    # Created test image from tmporary file.
+    img = str(tmpdir.join("img"))
+    qemu_img.convert(tmp, img, "raw", fmt, compressed=compressed)
+
+    measure = client.measure(img, "qcow2")
+    assert measure["required"] == 393216
+
+
+@pytest.mark.parametrize("compressed", [False, True])
+@pytest.mark.parametrize("fmt", ["raw", "qcow2"])
+def test_measure_from_ova(tmpdir, compressed, fmt):
+    # Create temporary file with some data.
+    size = 2 * 1024**2
+    tmp = str(tmpdir.join("tmp"))
+    with open(tmp, "wb") as f:
+        f.truncate(size)
+        f.write(b"x" * CLUSTER_SIZE)
+
+    # Created test image from tmporary file.
+    img = str(tmpdir.join("img"))
+    qemu_img.convert(tmp, img, "raw", "qcow2", compressed=compressed)
+
+    # Meaure the image.
+    img_measure = client.measure(img, fmt)
+
+    # Add test image to ova.
+    member = os.path.basename(img)
+    ova = str(tmpdir.join("ova"))
+    with tarfile.open(ova, "w") as tar:
+        tar.add(img, arcname=member)
+
+    # Measurement from ova should be same.
+    ova_measure = client.measure(ova, fmt, member=member)
+    assert ova_measure == img_measure
