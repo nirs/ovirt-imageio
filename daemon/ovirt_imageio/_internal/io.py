@@ -58,38 +58,25 @@ def copy(src, dst, dirty=False, max_workers=MAX_WORKERS,
         if progress:
             progress.size = src.size()
 
-        # Submit requests to executor.
         if dirty:
-            _submit_dirty_extents(src, executor, progress)
+            # We must treat the non-dirty extents as holes. We use this more
+            # only with new qcow2 image.
+            context = "dirty"
+            zero = False
         else:
-            _submit_data_extents(src, executor, zero, progress)
+            # Caller controls zero behavior. When writing to new file we can
+            # always skip zeroes, when wrting to server we need to zero since
+            # we don't know the contents of disk on the server.
+            context = "zero"
 
-
-def _submit_data_extents(src, executor, zero=True, progress=None):
-    """
-    Generic copy that can work with both new destination image or existing
-    image.  When using new image that is known to be zeroed, you can use
-    zero=False to skip zeroing.
-    """
-    for ext in src.extents("zero"):
-        if not ext.zero:
-            executor.submit(Request(COPY, ext.start, ext.length))
-        elif zero:
-            executor.submit(Request(ZERO, ext.start, ext.length))
-        elif progress:
-            progress.update(ext.length)
-
-
-def _submit_dirty_extents(src, executor, progress=None):
-    """
-    This is for incremental backup using qcow2 format, and we assume a new
-    empty image, so we never want to zero anything.
-    """
-    for ext in src.extents("dirty"):
-        if ext.dirty:
-            executor.submit(Request(COPY, ext.start, ext.length))
-        elif progress:
-            progress.update(ext.length)
+        # Submit requests to executor.
+        for ext in src.extents(context):
+            if ext.data:
+                executor.submit(Request(COPY, ext.start, ext.length))
+            elif zero:
+                executor.submit(Request(ZERO, ext.start, ext.length))
+            elif progress:
+                progress.update(ext.length)
 
 
 # Request ops.
