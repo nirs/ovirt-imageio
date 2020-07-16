@@ -491,30 +491,22 @@ class Response(object):
         if self._started:
             raise AssertionError("Response already sent")
 
-        self.status_code = e.code
-
-        # Adding newline makes it easier to debug from the command line.
-        body = str(e).encode("utf-8") + b"\n"
-
-        # Content-type header of the response is set to text/plain to mark
-        # content as non-interpretable by the client and thus avoid false
-        # positive from security analysis tools when we send requested URL
-        # back as part of, say, 404 response
-        self.headers["content-type"] = "text/plain; charset=UTF-8"
-
-        self.headers["content-length"] = len(body)
         if e.content_range is not None:
             self.headers["content-range"] = e.content_range
-        self.write(body)
 
-    def send_json(self, obj):
+        # Sending JSON errors avoids false alarms from from security analysis
+        # tools when we send raw html user input in the error message.
+        # See https://bugzilla.redhat.com/1757066.
+        self.send_json({"code": e.code, "message": str(e)}, status=e.code)
+
+    def send_json(self, obj, status=OK):
         """
         Send a JSON response.
         """
         if self._started:
             raise AssertionError("Response already sent")
 
-        self.status_code = OK
+        self.status_code = status
         body = json.dumps(obj).encode("utf-8") + b"\n"
         self.headers["content-length"] = len(body)
         self.headers["content-type"] = "application/json"

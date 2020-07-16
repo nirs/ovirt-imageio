@@ -1156,6 +1156,9 @@ def check_error(res, status):
     body = res.read()
 
     assert res.status == status
-    assert res.getheader("content-type") == "text/plain; charset=UTF-8"
+    assert res.getheader("content-type") == "application/json"
 
-    return body.decode("utf-8")
+    error = json.loads(body)
+    assert error["code"] == res.status
+
+    return error["message"]

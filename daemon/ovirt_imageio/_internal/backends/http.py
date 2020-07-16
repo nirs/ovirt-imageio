@@ -184,7 +184,7 @@ class Backend(object):
         res = self._con.getresponse()
 
         if res.status != http_client.OK:
-            self._reraise(res.status, res.read())
+            self._reraise(res, res.read())
 
         res.read()
         self._position += length
@@ -254,7 +254,7 @@ class Backend(object):
         res = self._con.getresponse()
 
         if res.status != http_client.OK:
-            self._reraise(res.status, res.read())
+            self._reraise(res, res.read())
 
         res.read()
         self._position += length
@@ -426,7 +426,7 @@ class Backend(object):
         res = self._con.getresponse()
 
         if res.status != http_client.PARTIAL_CONTENT:
-            self._reraise(res.status, res.read())
+            self._reraise(res, res.read())
 
         content_length = int(res.getheader("content-length"))
         if content_length != length:
@@ -458,7 +458,7 @@ class Backend(object):
         res = self._con.getresponse()
 
         if res.status != http_client.OK:
-            self._reraise(res.status, res.read())
+            self._reraise(res, res.read())
 
         res.read()
 
@@ -477,7 +477,7 @@ class Backend(object):
             # content.
             return options
         elif res.status != http_client.OK:
-            raise self._reraise(res.status, body)
+            raise self._reraise(res, body)
 
         # New daemon or proxy provides options dict.
         try:
@@ -506,7 +506,7 @@ class Backend(object):
                 .format(context, data[:512]))
 
         if res.status != http_client.OK:
-            self._reraise(res.status, data)
+            self._reraise(res, data)
 
         extents = json.loads(data.decode("utf-8"))
 
@@ -526,7 +526,7 @@ class Backend(object):
         res = self._con.getresponse()
 
         if res.status != http_client.OK:
-            self._reraise(res.status, res.read())
+            self._reraise(res, res.read())
 
         size = int(res.getheader("content-length"))
 
@@ -551,7 +551,7 @@ class Backend(object):
         res = self._con.getresponse()
 
         if res.status != http_client.OK:
-            self._reraise(res.status, res.read())
+            self._reraise(res, res.read())
 
         res.read()
         self._position += length
@@ -568,7 +568,7 @@ class Backend(object):
                         "Expected {} byes, got {} bytes".format(length, pos))
                 pos += n
 
-    def _reraise(self, status, body):
+    def _reraise(self, res, body):
         """
         Reconstruct http.Error from daemon response and raise it.
 
@@ -577,10 +577,22 @@ class Backend(object):
 
         Trim large body since it cannot be a valid error message.
         """
-        # Errors are always terminated by newline. Remove the newline before
-        # raising to avoid double newlines.
-        msg = body[:512].decode("utf-8", errors="replace").rstrip()
-        raise http.Error(status, msg)
+        body = body[:512].decode("utf-8", errors="replace")
+
+        content_type = res.getheader("content-type")
+
+        if content_type == "application/json":
+            try:
+                message = json.loads(body)["message"]
+            except ValueError:
+                message = "Invalid JSON: {}".format(body)
+            except KeyError:
+                message = "Unexpected JSON: {}".format(body)
+        else:
+            # text/plain or None, may have trailing newline.
+            message = body.rstrip()
+
+        raise http.Error(res.status, message)
 
 
 class HTTPSConnection(http_client.HTTPSConnection):
