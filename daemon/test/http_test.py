@@ -34,8 +34,6 @@ pytestmark = requires_python3
 
 log = logging.getLogger("test")
 
-ERROR_CONTENT_TYPE = "text/plain; charset=UTF-8"
-
 
 class Demo(object):
 
@@ -529,9 +527,7 @@ def test_range_demo(server):
         # Get invalid range after the last byte.
         con.request("GET", "/range-demo/", headers={"range": "bytes=0-100"})
         r = con.getresponse()
-        r.read()
-        assert r.status == http.REQUESTED_RANGE_NOT_SATISFIABLE
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
+        check_error(r, http.REQUESTED_RANGE_NOT_SATISFIABLE)
         assert r.getheader("content-range") == "bytes */16"
 
 
@@ -589,9 +585,7 @@ def test_request_info_get_unsatisfiable_range(server):
         con.request("GET", "/request-info/arg",
                     headers={"range": "bytes=invalid-99"})
         r = con.getresponse()
-        r.read()
-        assert r.status == http.REQUESTED_RANGE_NOT_SATISFIABLE
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
+        check_error(r, http.REQUESTED_RANGE_NOT_SATISFIABLE)
 
 
 def test_request_info_put(server):
@@ -625,8 +619,7 @@ def test_request_invalid_content_length(server, content_length):
             "/request-info/",
             headers={"content-length": content_length})
         r = con.getresponse()
-        assert r.status == http.BAD_REQUEST
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
+        check_error(r, http.BAD_REQUEST)
 
 
 def test_request_info_put_content_range(server):
@@ -652,9 +645,7 @@ def test_request_info_put_content_range_invalid(server):
                     body=content.encode("utf-8"),
                     headers={"content-range": "bytes 0-invalid/*"})
         r = con.getresponse()
-        r.read()
-        assert r.status == http.BAD_REQUEST
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
+        check_error(r, http.BAD_REQUEST)
 
 
 @pytest.mark.parametrize("uri,path,arg", [
@@ -707,9 +698,7 @@ def test_context(server):
         # No context yet.
         con.request("GET", "/context/this")
         r = con.getresponse()
-        assert r.status == http.NOT_FOUND
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
-        r.read()
+        check_error(r, http.NOT_FOUND)
 
         # Set value for "this".
         con.request("PUT", "/context/this", body=b"value")
@@ -732,9 +721,7 @@ def test_context(server):
         # No context now.
         con.request("GET", "/context/this")
         r = con.getresponse()
-        assert r.status == http.NOT_FOUND
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
-        r.read()
+        check_error(r, http.NOT_FOUND)
 
 
 def test_context_per_connection(server):
@@ -750,9 +737,7 @@ def test_context_per_connection(server):
         # Connection 1 should have no value.
         con2.request("GET", "/context/this")
         r = con2.getresponse()
-        assert r.status == http.NOT_FOUND
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
-        r.read()
+        check_error(r, http.NOT_FOUND)
 
         # Set value for "this" in connection 2.
         con2.request("PUT", "/context/this", body=b"con2 value")
@@ -781,9 +766,7 @@ def test_context_deleted_on_close(server):
         # Should have no value.
         con.request("GET", "/context/this")
         r = con.getresponse()
-        assert r.status == http.NOT_FOUND
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
-        r.read()
+        check_error(r, http.NOT_FOUND)
 
 
 def test_context_close(server):
@@ -842,8 +825,7 @@ def test_not_found(server):
     with closing(con):
         con.request("GET", "/no/such/path")
         r = con.getresponse()
-        assert r.status == http.NOT_FOUND
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
+        check_error(r, http.NOT_FOUND)
 
 
 def test_method_not_allowed(server):
@@ -851,8 +833,7 @@ def test_method_not_allowed(server):
     with closing(con):
         con.request("POST", "/demo/name")
         r = con.getresponse()
-        assert r.status == http.METHOD_NOT_ALLOWED
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
+        check_error(r, http.METHOD_NOT_ALLOWED)
 
 
 def test_invalid_method(server):
@@ -860,8 +841,7 @@ def test_invalid_method(server):
     with closing(con):
         con.request("FOO", "/demo/name")
         r = con.getresponse()
-        assert r.status == http.METHOD_NOT_ALLOWED
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
+        check_error(r, http.METHOD_NOT_ALLOWED)
 
 
 def test_client_error_get(server):
@@ -869,8 +849,7 @@ def test_client_error_get(server):
     with closing(con):
         con.request("GET", "/client-error/")
         r = con.getresponse()
-        assert r.status == http.FORBIDDEN
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
+        check_error(r, http.FORBIDDEN)
 
 
 def test_client_error_put(server):
@@ -882,8 +861,7 @@ def test_client_error_put(server):
             if e.args[0] not in (errno.EPIPE, errno.ESHUTDOWN):
                 raise
         r = con.getresponse()
-        assert r.status == http.FORBIDDEN
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
+        check_error(r, http.FORBIDDEN)
 
 
 def test_internal_error_get(server):
@@ -892,9 +870,8 @@ def test_internal_error_get(server):
     with closing(con):
         con.request("GET", "/server-error/")
         r = con.getresponse()
-        assert r.status == http.INTERNAL_SERVER_ERROR
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
-        assert "secret" not in r.read().decode("utf-8")
+        error = check_error(r, http.INTERNAL_SERVER_ERROR)
+        assert "secret" not in error
 
 
 def test_internal_error_put(server):
@@ -907,9 +884,8 @@ def test_internal_error_put(server):
             if e.args[0] not in (errno.EPIPE, errno.ESHUTDOWN):
                 raise
         r = con.getresponse()
-        assert r.status == http.INTERNAL_SERVER_ERROR
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
-        assert "secret" not in r.read().decode("utf-8")
+        error = check_error(r, http.INTERNAL_SERVER_ERROR)
+        assert "secret" not in error
 
 
 def test_server_socket_error_get(server):
@@ -918,8 +894,7 @@ def test_server_socket_error_get(server):
     with closing(con):
         con.request("GET", "/server-socket-error/")
         r = con.getresponse()
-        assert r.status == http.INTERNAL_SERVER_ERROR
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
+        check_error(r, http.INTERNAL_SERVER_ERROR)
 
 
 def test_server_socket_error_put(server):
@@ -932,8 +907,7 @@ def test_server_socket_error_put(server):
             if e.args[0] not in (errno.EPIPE, errno.ESHUTDOWN):
                 raise
         r = con.getresponse()
-        assert r.status == http.INTERNAL_SERVER_ERROR
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
+        check_error(r, http.INTERNAL_SERVER_ERROR)
 
 
 @pytest.mark.parametrize("data", [None, b"", b"read me"])
@@ -951,9 +925,7 @@ def test_keep_connection_on_error(server, data):
         for i in range(3):
             con.request("PUT", "/keep-connection/", body=data)
             r = con.getresponse()
-            r.read()
-            assert r.status == http.FORBIDDEN
-            assert r.getheader("content-type") == ERROR_CONTENT_TYPE
+            check_error(r, http.FORBIDDEN)
 
 
 def test_close_connection_on_error(server):
@@ -969,9 +941,7 @@ def test_close_connection_on_error(server):
         # so the server will close the connection.
         con.request("PUT", "/client-error/", body=b"read me")
         r = con.getresponse()
-        r.read()
-        assert r.status == http.FORBIDDEN
-        assert r.getheader("content-type") == ERROR_CONTENT_TYPE
+        check_error(r, http.FORBIDDEN)
 
         # Try to send another request. This will fail since we disabled
         # auto_open.  Fails in request() or in getresponse(), probably
@@ -1179,3 +1149,13 @@ def test_prefer_ipv4(listen_address):
         with closing(con):
             con.request("GET", "/demo/name")
             con.getresponse()
+
+
+def check_error(res, status):
+    # Always consume the entire response.
+    body = res.read()
+
+    assert res.status == status
+    assert res.getheader("content-type") == "text/plain; charset=UTF-8"
+
+    return body.decode("utf-8")
