@@ -218,15 +218,10 @@ static int module_init(PyObject *m)
     return 0;
 }
 
-#define MODULE_NAME "ioutil"
-#define MODULE_DOC "Low level I/O utilities"
-
-#if PY_MAJOR_VERSION >= 3
-
 static struct PyModuleDef moduledef = {
     PyModuleDef_HEAD_INIT,
-    MODULE_NAME,
-    MODULE_DOC,
+    "ioutil",
+    "Low level I/O utilities",
     -1,
     module_methods,
 };
@@ -245,19 +240,3 @@ PyInit_ioutil(void)
 
     return m;
 }
-
-#else
-
-PyMODINIT_FUNC
-initioutil(void)
-{
-    PyObject *m;
-
-    m = Py_InitModule3(MODULE_NAME, module_methods, MODULE_DOC);
-    if (m == NULL)
-        return;
-
-    module_init(m);
-}
-
-#endif
