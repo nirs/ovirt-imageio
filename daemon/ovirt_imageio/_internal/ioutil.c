@@ -103,7 +103,7 @@ is_zero(PyObject *self, PyObject *args)
     size_t i;
     int res;
 
-    if (!PyArg_ParseTuple(args, "s*:is_zero", &b))
+    if (!PyArg_ParseTuple(args, "y*:is_zero", &b))
         return NULL;
 
     /*
