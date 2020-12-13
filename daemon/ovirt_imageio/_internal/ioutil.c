@@ -1,6 +1,6 @@
 /*
  * ovirt-imageio
- * Copyright (C) 2017-2018 Red Hat, Inc.
+ * Copyright (C) 2017-2020 Red Hat, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -11,6 +11,7 @@
 #include <Python.h>
 
 #define GNU_SOURCE
+#include <errno.h>
 #include <fcntl.h>
 #include <linux/falloc.h>  /* For FALLOC_FL_* on RHEL, glibc < 2.18 */
 #include <sys/ioctl.h>  /* ioctl */
@@ -192,12 +193,60 @@ py_fallocate(PyObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(py_pread_doc, "\
+pread(fd, buf, offset) -> int\n\
+Read from a file descriptor, fd, at a position of offset. It will read\n\
+up to len(buf) bytes. The file offset remains unchanged.\n\
+\n\
+Like os.pread(), but it read into a buffer instead of allocating a new\n\
+buffer. This allows reading from a file descriptor opened with O_DIRECT.\n\
+\n\
+Arguments\n\
+  fd (int): file descriptor to read from.\n\
+  buf (buffer): buffer to write the data to.\n\
+  offset (int): start reading from offset.\n\
+\n\
+Retruns\n\
+  Number of bytes read.\n\
+\n\
+Raises\n\
+  OSError if the read failed, or exception raised by a signal handler\n\
+  if the function was interrupted by signal.\n\
+");
+
+static PyObject *
+py_pread(PyObject *self, PyObject *args)
+{
+    int fd;
+    Py_buffer b;
+    off_t offset;
+    ssize_t n;
+    int async_err = 0;
+
+    if (!PyArg_ParseTuple(args, "iy*K:pread", &fd, &b, &offset))
+        return NULL;
+
+    do {
+        Py_BEGIN_ALLOW_THREADS
+        n = pread(fd, b.buf, b.len, offset);
+        Py_END_ALLOW_THREADS
+    } while (n < 0 && errno == EINTR && !(async_err = PyErr_CheckSignals()));
+
+    PyBuffer_Release(&b);
+
+    if (n < 0)
+        return async_err ? NULL : PyErr_SetFromErrno(PyExc_OSError);
+
+    return PyLong_FromSsize_t(n);
+}
+
 static PyMethodDef module_methods[] = {
     {"blkzeroout", (PyCFunction) blkzeroout, METH_VARARGS | METH_KEYWORDS,
         blkzeroout_doc},
     {"blksszget", (PyCFunction) blksszget, METH_VARARGS, blksszget_doc},
     {"is_zero", (PyCFunction) is_zero, METH_VARARGS, is_zero_doc},
     {"fallocate", (PyCFunction) py_fallocate, METH_VARARGS, py_fallocate_doc},
+    {"pread", (PyCFunction) py_pread, METH_VARARGS, py_pread_doc},
     {NULL}  /* Sentinel */
 };
 

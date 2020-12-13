@@ -9,6 +9,7 @@
 import errno
 import os
 import subprocess
+import time
 
 from contextlib import closing
 
@@ -299,3 +300,71 @@ def try_fallocate(fd, mode, offset, count):
         if e.errno != errno.EOPNOTSUPP:
             raise
         pytest.skip("fallocate(mode=%r) not supported" % mode)
+
+
+# pread
+
+
+def test_pread(tmpdir):
+    path = str(tmpdir.join("file"))
+    size = 1024**2
+    buf = util.aligned_buffer(BLOCKSIZE)
+    with closing(buf):
+        fd = os.open(path, os.O_RDWR | os.O_DIRECT | os.O_CREAT)
+        try:
+            os.ftruncate(fd, size)
+
+            # Read block of zeroes.
+            buf[:] = b"x" * BLOCKSIZE
+            n = ioutil.pread(fd, buf, 4096)
+            assert n == BLOCKSIZE
+            assert buf[:] == b"\0" * BLOCKSIZE
+
+            # File position not modifed by the read.
+            assert os.lseek(fd, 0, os.SEEK_CUR) == 0
+
+            # Write block of data.
+            buf[:] = b"x" * BLOCKSIZE
+            os.pwrite(fd, buf, 8192)
+
+            # Read block of data.
+            buf[:] = b"\0" * BLOCKSIZE
+            n = ioutil.pread(fd, buf, 8192)
+            assert n == BLOCKSIZE
+            assert buf[:] == b"x" * BLOCKSIZE
+
+            # File position not modifed by the read.
+            assert os.lseek(fd, 0, os.SEEK_CUR) == 0
+        finally:
+            os.close(fd)
+
+
+@pytest.mark.benchmark
+@pytest.mark.parametrize("size_kb", [128, 256, 512, 1024, 2048, 4096, 8192])
+@pytest.mark.parametrize("data", [
+    pytest.param(True, id="data"),
+    pytest.param(False, id="zero")
+])
+def test_benchmark_pread(tmpdir, data, size_kb):
+    path = str(tmpdir.join("file"))
+    size = size_kb * 1024
+    ops = 1000
+
+    with open(path, "w") as f:
+        f.truncate(size)
+        if data:
+            f.write("x" * size)
+
+    buf = util.aligned_buffer(size)
+    with closing(buf):
+        fd = os.open(path, os.O_RDONLY | os.O_DIRECT)
+        try:
+            start = time.monotonic()
+            for i in range(ops):
+                ioutil.pread(fd, buf, 0)
+            elapsed = time.monotonic() - start
+        finally:
+            os.close(fd)
+
+    rate = ops * size / elapsed
+    print(f"{ops} ops, {elapsed:.3f} s, {util.humansize(rate)}/s")
