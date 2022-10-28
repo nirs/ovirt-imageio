@@ -45,13 +45,34 @@ class Choices:
 log_level = Choices("log_level", ("debug", "info", "warning", "error"))
 
 
+class StoreFalseOrNone(argparse.Action):
+    """
+    This action stores 'False' value, similar to 'store_false' but without
+    the implicit default 'True' value.
+    This action is to be used with optional arguments that specify
+    some sort of flag.
+    """
+
+    def __init__(self, option_strings, dest, required=False, help=None):
+        super().__init__(
+            option_strings=option_strings,
+            dest=dest,
+            nargs=0,
+            required=required,
+            help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, False)
+
+
 class Option(
-        namedtuple("Option", "name,args,config,required,type,default,help")):
+        namedtuple(
+            "Option", "name,args,config,required,action,type,default,help")):
 
     __slots__ = ()
 
     def __new__(cls, name=None, args=(), config=False, required=False,
-                type=str, default=None, help=None):
+                action=None, type=str, default=None, help=None):
         """
         Arguments:
             name (str): Option name use in config file or parsed arguments.
@@ -61,6 +82,8 @@ class Option(
             required (bool): If True this option is required and parsing
                 arguments will fail if it is not specified in the command line
                 or config file.
+            action (Union[argparse.Action, str]): Specify how an argument
+                should be handled. Defaults to 'store' action.
             type (callable): Callable converting the command line argument or
                 config value to the wanted type. Must raise ValueError if the
                 value is invalid and cannot be converted.
@@ -69,7 +92,19 @@ class Option(
             help (str): Help message to show in the online help.
         """
         return tuple.__new__(
-            cls, (name, args, config, required, type, default, help))
+            cls, (name, args, config, required, action, type, default, help))
+
+    @property
+    def kwargs(self):
+        option_kwargs = {
+            "dest": self.name,
+            "help": self.help,
+        }
+        if self.action:
+            option_kwargs["action"] = self.action
+        else:
+            option_kwargs["type"] = self.type
+        return option_kwargs
 
 
 class Parser:
@@ -115,6 +150,14 @@ class Parser:
                   "from the specified config section"),
         ),
         Option(
+            name="secure",
+            args=["--insecure"],
+            action=StoreFalseOrNone,
+            default=True,
+            help=("Do not verify server certificates and host name (not "
+                  "recommened).")
+        ),
+        Option(
             name="disk_timeout",
             config=True,
             type=int,
@@ -155,11 +198,7 @@ class Parser:
             if not option.args:
                 continue
 
-            cmd.add_argument(
-                *option.args,
-                dest=option.name,
-                type=option.type,
-                help=option.help)
+            cmd.add_argument(*option.args, **option.kwargs)
 
         if transfer_options:
             size = Size(minimum=1, default=MAX_WORKERS, maximum=8)
