@@ -20,6 +20,9 @@ import uuid
 
 
 ADD_DISK_TIMEOUT = 120
+# Possible boolean values in the configuration.
+BOOLEAN_STATES = {'1': True, 'yes': True, 'true': True, 'on': True,
+                  '0': False, 'no': False, 'false': False, 'off': False}
 
 
 class Choices:
@@ -43,6 +46,12 @@ class Choices:
 
 
 log_level = Choices("log_level", ("debug", "info", "warning", "error"))
+
+
+def bool_string(value):
+    if value.lower() not in BOOLEAN_STATES:
+        raise ValueError(f"Not a boolean: '{value}'")
+    return BOOLEAN_STATES[value.lower()]
 
 
 class StoreFalseOrNone(argparse.Action):
@@ -153,7 +162,9 @@ class Parser:
             name="secure",
             args=["--insecure"],
             action=StoreFalseOrNone,
+            config=True,
             default=True,
+            type=bool_string,
             help=("Do not verify server certificates and host name (not "
                   "recommened).")
         ),
