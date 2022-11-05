@@ -54,26 +54,6 @@ def bool_string(value):
     return BOOLEAN_STATES[value.lower()]
 
 
-class StoreFalseOrNone(argparse.Action):
-    """
-    This action stores 'False' value, similar to 'store_false' but without
-    the implicit default 'True' value.
-    This action is to be used with optional arguments that specify
-    some sort of flag.
-    """
-
-    def __init__(self, option_strings, dest, required=False, help=None):
-        super().__init__(
-            option_strings=option_strings,
-            dest=dest,
-            nargs=0,
-            required=required,
-            help=help)
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        setattr(namespace, self.dest, False)
-
-
 class Option(
         namedtuple(
             "Option", "name,args,config,required,action,type,default,help")):
@@ -107,6 +87,7 @@ class Option(
     def kwargs(self):
         option_kwargs = {
             "dest": self.name,
+            "default": None,
             "help": self.help,
         }
         if self.action:
@@ -161,7 +142,7 @@ class Parser:
         Option(
             name="secure",
             args=["--insecure"],
-            action=StoreFalseOrNone,
+            action="store_false",
             config=True,
             default=True,
             type=bool_string,
